@@ -1,0 +1,216 @@
+// Synth 1: CC80 0
+// Synth 2: CC 80 1
+// Synth 3: CC 81 0
+// Bass:    CC 82 0/1
+// Guitar:  CC 83 0/1
+// Vocal:   CC 84 0/1
+// Piano:   CC 85 0
+// Mix:     CC 86 0/1
+
+@OnLoad 
+  ShowLayout 3
+  
+  Call @DefineVars
+  
+  daw_init = [0x00, 0x20, 0x6B, 0x7F, 0x42, 0x02, 0x0F, 0x40, 0x5A, 0x01]
+  SendSysex daw_init, 10
+  
+  make_screen__type = 0x14
+  make_screen__line1 = [_T, e, s, t, __, _[1]]
+  make_screen__line2 = [_T, e, s, t, __, _[2]]
+  make_screen__hw_value = 78
+  make_screen__transient = 1
+  
+  Call @MakeScreen
+  SendSysex make_screen__return, make_screen__length
+
+@End 
+
+
+
+@OnMidiCC
+  
+@End
+
+@OnXYChange
+  SendMIDICC 0, 1, GetYValue
+  // SendMIDIPitchBend 0, GetXValue * 128
+@End
+
+
+
+@WrapSysEx
+
+  CopyArray sysex_prefix, wrap_sysex__return, 5
+  CopyArray wrap_sysex__data, wrap_sysex__return[5], wrap_sysex__length
+  wrap_sysex__length = wrap_sysex__length + 5
+@End
+
+
+@WrapDisplay
+
+  CopyArray display_prefix, wrap_display__return, 3
+  CopyArray wrap_display__data, wrap_display__return[3], wrap_display__length
+  wrap_sysex__length = wrap_display__length + 3
+  CopyArray wrap_display__return, wrap_sysex__data, wrap_sysex__length
+  Call @WrapSysEx
+  wrap_display__length = wrap_sysex__length
+  CopyArray wrap_sysex__return, wrap_display__return, wrap_display__length
+@End
+
+
+@MakeScreen
+  
+  // Fill 1st line
+  
+  make_screen__return = [make_screen__type, 0x01]
+  CopyArray make_screen__line1, make_screen__return[2], 19
+  make_screen__length = 21
+  
+  // Fill 2nd line
+  
+  if make_screen__type > 0x11
+    make_screen__return[make_screen__length] = 0x02
+    Inc make_screen__length
+    CopyArray make_screen__line2, make_screen__return[make_screen__length], 19
+    make_screen__length = make_screen__length + 19
+  endif
+  
+  // Fill hw_value or icon
+  
+  if make_screen__type > 0x13 and make_screen__type < 0x17
+    make_screen__return[make_screen__length] = 0x03
+    Inc make_screen__length
+    make_screen__return[make_screen__length] = make_screen__hw_value
+    Inc make_screen__length
+  elseif make_screen__type > 0x18
+    make_screen__return[make_screen__length] = 0x03
+    Inc make_screen__length
+    make_screen__return[make_screen__length] = make_screen__icon
+    Inc make_screen__length
+  endif
+  
+  // Handle transient
+  
+  if make_screen__type = 0x17
+    make_screen__return[make_screen__length] = 01
+    Inc make_screen__length
+  elseif NOT (make_screen__type = 0x13)
+    make_screen__return[make_screen__length] = make_screen__transient
+    Inc make_screen__length
+  endif
+  
+  // Wrap with Display code
+  
+  wrap_display__length = make_screen__length
+  CopyArray make_screen__return, wrap_display__data, wrap_display__length
+  Call @WrapDisplay
+  CopyArray wrap_display__return, make_screen__return, wrap_display__length
+  make_screen__length = wrap_display__length
+  
+  // Reset params
+  
+  FillArray make_screen__line1, 0, 19
+  FillArray make_screen__line2, 0, 19
+  make_screen__transient = 0
+@End
+
+
+//  CopyArray data, log_array__data, make_screen__length
+//  log_array__length = data__length
+//  Call @LogArray 
+
+@LogArray
+
+  repeat
+    Log log_array__length, {: }, log_array__data[log_array__length]
+    Dec log_array__length
+  until log_array__length <= 0
+@End
+
+
+
+@DefineVars
+
+  sysex_prefix = [0x00, 0x20, 0x6B, 0x7F, 0x42]
+  display_prefix = [0x04, 0x01, 0x60]
+
+  // @WrapSysEx params
+    wrap_sysex__data = []
+    wrap_sysex__length = 0
+    wrap_sysex__return = []
+  
+  // @WrapDisplay params
+    wrap_display__data = []
+    wrap_display__length = 0
+    wrap_display__return = []
+  
+  // @MakeScreen params
+    make_screen__type = 0x10
+    make_screen__line1 = []
+    make_screen__line2 = []
+    make_screen__icon = 0
+    make_screen__hw_value = 0
+    make_screen__transient = 0
+    make_screen__return = []
+    
+  // ASCII Table
+    __ = 0x20
+    
+    _A = 0x41
+    _B = 0x42
+    _C = 0x43
+    _D = 0x44
+    _E = 0x45
+    _F = 0x46
+    _G = 0x47
+    _H = 0x48
+    _I = 0x49
+    _J = 0x4A
+    _K = 0x4B
+    _L = 0x4C
+    _M = 0x4D
+    _N = 0x4E
+    _O = 0x4F
+    _P = 0x50
+    _Q = 0x51
+    _R = 0x52
+    _S = 0x53
+    _T = 0x54
+    _U = 0x55
+    _V = 0x56
+    _W = 0x57
+    _X = 0x58
+    _Y = 0x59
+    _Z = 0x5A
+    
+    a = 0x61
+    b = 0x62
+    c = 0x63
+    d = 0x64
+    e = 0x65
+    f = 0x66
+    g = 0x67
+    h = 0x68
+    i = 0x69
+    j = 0x6A
+    k = 0x6B
+    l = 0x6C
+    m = 0x6D
+    n = 0x6E
+    o = 0x6F
+    p = 0x70
+    q = 0x71
+    r = 0x72
+    s = 0x73
+    t = 0x74
+    u = 0x75
+    v = 0x76
+    w = 0x77
+    x = 0x78
+    y = 0x79
+    z = 0x7A
+    
+    _ = [0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39]
+  
+@End
