@@ -1,30 +1,46 @@
 // Synth 1: CC80 0
-// Synth 2: CC 80 1
-// Synth 3: CC 81 0
-// Bass:    CC 82 0/1
-// Guitar:  CC 83 0/1
-// Vocal:   CC 84 0/1
-// Piano:   CC 85 0
-// Mix:     CC 86 0/1
+// Synth 2: CC 81 0
+// Synth 3: CC 82 0
+// Bass:    CC 83 0/1
+// Guitar:  CC 84 0/1
+// Vocal:   CC 85 0/1
+// Piano:   CC 86 0
+// FX:      CC 87 0/1
+// Monitor: CC 88 0/1
 
 @OnLoad 
   ShowLayout 3
   
   Call @DefineVars
+  Call @DefinePages
   
   daw_init = [0x00, 0x20, 0x6B, 0x7F, 0x42, 0x02, 0x0F, 0x40, 0x5A, 0x01]
   SendSysex daw_init, 10
   
-  make_screen__type = 0x14
-  make_screen__line1 = [_T, e, s, t, __, _[1]]
-  make_screen__line2 = [_T, e, s, t, __, _[2]]
-  make_screen__hw_value = 78
-  make_screen__transient = 1
-  
-  Call @MakeScreen
-  SendSysex make_screen__return, make_screen__length
+  page = 8
+  Call @LoadPage
 
-@End 
+@End
+
+
+@DefinePages
+  
+  no_of_pages = 9
+  
+  page_names[0 * string_length] = [_S,y,n,t,h,__,_[1]]
+  page_names[1 * string_length] = [_S,y,n,t,h,_[2]]
+  page_names[2 * string_length] = [_S,y,n,t,h,__,_[3]]
+  page_names[3 * string_length] = [_B,a,s,s]
+  page_names[4 * string_length] = [_G,u,i,t,a,r]
+  page_names[5 * string_length] = [_V,o,c,a,l]
+  page_names[6 * string_length] = [_P,i,a,n,o]
+  page_names[7 * string_length] = [_F,_X]
+  page_names[8 * string_length] = [_M,o,n,i,t,o,r]
+
+  page_icons = [0x18, 0x18, 0x18, 0x03, 0x03, 0x37, 0x28, 0x2F, 0x35]
+  page_parts = [0, 0, 0, 1, 1, 1, 0, 1, 0]            // 0 = 1 part; 1 = 2 parts;
+  
+@End
 
 
 
@@ -38,6 +54,37 @@
 @End
 
 
+@LoadPage
+  
+  make_screen__type = 0x19
+  make_screen__icon = page_icons[page]
+  CopyArray page_names[page * string_length], make_screen__line1, string_length
+
+  if page_parts[page]
+    make_screen__line2 = [_P,a,r,t,__,_[part + 1]]
+  endif
+  
+  Call @MakeScreen
+  SendSysex make_screen__return, make_screen__length
+
+  prev = page - 1
+  next = page + 1
+
+  if page = 0
+    prev = 8
+  elseif page = (no_of_pages - 1)
+    next = 0
+  endif
+
+  CopyArray page_names[prev * string_length], left_right_nav__l_line, 7
+  CopyArray page_names[next * string_length], left_right_nav__r_line, 7
+  Call @LeftRightNav
+
+  CopyArray left_right_nav__return, make_header__line1, string_length 
+  // make_header__line1 = [_T,e,s,t]
+  Call @MakeHeader
+  SendSysex make_header__return, make_header__length
+@End
 
 @WrapSysEx
 
@@ -116,9 +163,54 @@
 @End
 
 
+@MakeHeader
+  
+  make_header__return = [0x01, 0x02]
+  CopyArray make_header__line1, make_header__return[2], 20
+  
+  wrap_display__length = make_header__length
+  CopyArray make_header__return, wrap_display__data, wrap_display__length
+  Call @WrapDisplay
+  CopyArray wrap_display__return, make_header__return, wrap_display__length
+  make_header__length = wrap_display__length
+@End
+
+
+@LeftRightNav
+
+  FillArray left_right_nav__return, __, 18
+  left_right_nav__return[0] = 0x3C
+  left_right_nav__return[17] = 0x3E
+
+  line_index = 0
+  repeat
+    if left_right_nav__l_line[line_index]
+      left_right_nav__return[line_index + 1] = left_right_nav__l_line[line_index]
+    endif
+    Inc line_index
+  until line_index >= 7
+  
+  line_index = 7
+  repeat
+    Dec line_index
+  until left_right_nav__r_line[line_index] OR line_index <= 0
+
+  Inc line_index
+  return_index = 17
+  repeat
+    Dec return_index
+    Dec line_index
+    left_right_nav__return[return_index] = left_right_nav__r_line[line_index]
+  until line_index <= 0
+  
+  FillArray left_right_nav__l_line, 0, 7
+  FillArray left_right_nav__r_line, 0, 7
+@End
+
+
 //  CopyArray data, log_array__data, make_screen__length
 //  log_array__length = data__length
-//  Call @LogArray 
+//  Call @LogArray
 
 @LogArray
 
@@ -134,7 +226,12 @@
 
   sysex_prefix = [0x00, 0x20, 0x6B, 0x7F, 0x42]
   display_prefix = [0x04, 0x01, 0x60]
-
+  string_length = 18
+  page = 0
+  prev = 8
+  next = 1
+  part = 0
+  
   // @WrapSysEx params
     wrap_sysex__data = []
     wrap_sysex__length = 0
@@ -153,6 +250,16 @@
     make_screen__hw_value = 0
     make_screen__transient = 0
     make_screen__return = []
+    
+  // @MakeHeader params
+    make_header__line1 = []
+    make_header__return = []
+    make_header__length = 22
+    
+  // @LeftRightNav params
+    left_right_nav__l_line = []
+    left_right_nav__r_line = []
+    left_right_nav__return = []
     
   // ASCII Table
     __ = 0x20
