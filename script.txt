@@ -16,8 +16,8 @@
   
   daw_init = [0x00, 0x20, 0x6B, 0x7F, 0x42, 0x02, 0x0F, 0x40, 0x5A, 0x01]
   SendSysex daw_init, 10
-  
-  page = 8
+
+  page = 3
   Call @LoadPage
 
 @End
@@ -37,7 +37,7 @@
   page_names[7 * string_length] = [_F,_X]
   page_names[8 * string_length] = [_M,o,n,i,t,o,r]
 
-  page_icons = [0x18, 0x18, 0x18, 0x03, 0x03, 0x37, 0x28, 0x2F, 0x35]
+  page_icons = [0x18, 0x18, 0x18, 0x03, 0x03, 0x37, 0x28, 0x2F, 0x3F]
   page_parts = [0, 0, 0, 1, 1, 1, 0, 1, 0]            // 0 = 1 part; 1 = 2 parts;
   
 @End
@@ -46,6 +46,19 @@
 
 @OnMidiCC
   
+  if MIDIByte2 = 0x74
+    if MIDIByte3 = 63
+      if page > 0
+        Dec page
+        Call @LoadPage
+      endif
+    elseif MIDIByte3 = 65
+      if page < no_of_pages - 1
+        Inc page
+        Call @LoadPage
+      endif
+    endif
+  endif
 @End
 
 @OnXYChange
@@ -55,6 +68,15 @@
 
 
 @LoadPage
+
+  prev = page - 1
+  next = page + 1
+  
+  if page = 0
+    prev = no_of_pages - 1
+  elseif page = no_of_pages - 1
+    next = 0
+  endif
   
   make_screen__type = 0x19
   make_screen__icon = page_icons[page]
@@ -65,32 +87,23 @@
   endif
   
   Call @MakeScreen
-  SendSysex make_screen__return, make_screen__length
 
-  prev = page - 1
-  next = page + 1
-
-  if page = 0
-    prev = 8
-  elseif page = (no_of_pages - 1)
-    next = 0
-  endif
-
-  CopyArray page_names[prev * string_length], left_right_nav__l_line, 7
-  CopyArray page_names[next * string_length], left_right_nav__r_line, 7
+  CopyArray page_names[5 * string_length], left_right_nav__l_line, 7
+  CopyArray page_names[7 * string_length], left_right_nav__r_line, 7
   Call @LeftRightNav
 
   CopyArray left_right_nav__return, make_header__line1, string_length 
   // make_header__line1 = [_T,e,s,t]
   Call @MakeHeader
-  SendSysex make_header__return, make_header__length
 @End
 
-@WrapSysEx
+@SendSysEx
 
-  CopyArray sysex_prefix, wrap_sysex__return, 5
-  CopyArray wrap_sysex__data, wrap_sysex__return[5], wrap_sysex__length
-  wrap_sysex__length = wrap_sysex__length + 5
+  CopyArray sysex_prefix, send_sysex__return, 5
+  CopyArray send_sysex__data, send_sysex__return[5], send_sysex__length
+  send_sysex__length = send_sysex__length + 5
+  
+  SendSysex send_sysex__return, send_sysex__length
 @End
 
 
@@ -98,11 +111,9 @@
 
   CopyArray display_prefix, wrap_display__return, 3
   CopyArray wrap_display__data, wrap_display__return[3], wrap_display__length
-  wrap_sysex__length = wrap_display__length + 3
-  CopyArray wrap_display__return, wrap_sysex__data, wrap_sysex__length
-  Call @WrapSysEx
-  wrap_display__length = wrap_sysex__length
-  CopyArray wrap_sysex__return, wrap_display__return, wrap_display__length
+  send_sysex__length = wrap_display__length + 3
+  CopyArray wrap_display__return, send_sysex__data, send_sysex__length
+  Call @SendSysEx
 @End
 
 
@@ -152,8 +163,6 @@
   wrap_display__length = make_screen__length
   CopyArray make_screen__return, wrap_display__data, wrap_display__length
   Call @WrapDisplay
-  CopyArray wrap_display__return, make_screen__return, wrap_display__length
-  make_screen__length = wrap_display__length
   
   // Reset params
   
@@ -171,8 +180,6 @@
   wrap_display__length = make_header__length
   CopyArray make_header__return, wrap_display__data, wrap_display__length
   Call @WrapDisplay
-  CopyArray wrap_display__return, make_header__return, wrap_display__length
-  make_header__length = wrap_display__length
 @End
 
 
@@ -190,7 +197,7 @@
     Inc line_index
   until line_index >= 7
   
-  line_index = 7
+  line_index = 6
   repeat
     Dec line_index
   until left_right_nav__r_line[line_index] OR line_index <= 0
@@ -227,15 +234,13 @@
   sysex_prefix = [0x00, 0x20, 0x6B, 0x7F, 0x42]
   display_prefix = [0x04, 0x01, 0x60]
   string_length = 18
-  page = 0
-  prev = 8
-  next = 1
+  page = 6
   part = 0
   
-  // @WrapSysEx params
-    wrap_sysex__data = []
-    wrap_sysex__length = 0
-    wrap_sysex__return = []
+  // @SendSysEx params
+    send_sysex__data = []
+    send_sysex__length = 0
+    send_sysex__return = []
   
   // @WrapDisplay params
     wrap_display__data = []
