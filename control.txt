@@ -1,0 +1,281 @@
+
+// Synth 1: CC80 0
+// Synth 2: CC 81 0
+// Synth 3: CC 82 0
+// Bass:    CC 83 0/1
+// Guitar:  CC 84 0/1
+// Vocal:   CC 85 0/1
+// Piano:   CC 86 0
+// FX:      CC 87 0/1
+// Monitor: CC 88 0/1
+
+@OnLoad 
+  ShowLayout 3
+  SetShortName {KLEs3 Display}
+  
+  Call @DefineVars
+  Call @DefinePages
+    
+@End
+
+
+@DefinePages
+  
+  no_of_pages = 9
+  
+  page_1_labels[0 * label_length] = [_A,m,p,__,_A,t,t,a,c,k]
+  page_1_labels[1 * label_length] = [_A,m,p,__,_D,e,c,a,y]
+  page_1_labels[2 * label_length] = [_A,m,p,__,_S,u,s,t,a,i,n]
+  page_1_labels[3 * label_length] = [_B,a,s,s]
+  page_1_labels[4 * label_length] = [_G,u,i,t,a,r]
+  page_1_labels[5 * label_length] = [_V,o,c,a,l]
+  page_1_labels[6 * label_length] = [_P,i,a,n,o]
+  page_1_labels[7 * label_length] = [_F,_X]
+  page_1_labels[8 * label_length] = [_M,o,n,i,t,o,r]
+
+  page_1_labels[9 * label_length] = [_S,y,n,t,h,__,_[1]]
+  page_1_labels[10 * label_length] = [_S,y,n,t,h,_[2]]
+  page_1_labels[11 * label_length] = [_S,y,n,t,h,__,_[3]]
+  page_1_labels[12 * label_length] = [_B,a,s,s]
+  page_1_labels[13 * label_length] = [_G,u,i,t,a,r]
+  page_1_labels[14 * label_length] = [_V,o,c,a,l]
+  page_1_labels[15 * label_length] = [_P,i,a,n,o]
+  page_1_labels[16 * label_length] = [_F,_X]
+  page_1_labels[17 * label_length] = [_M,o,n,i,t,o,r]
+  
+@End
+
+
+
+@OnMidiCC
+  
+  if MIDIByte2 >= 80 AND MIDIByte2 < 80 + no_of_pages
+    page = MIDIByte2 - 80
+    part = MIDIByte3
+    FillArray knob_sync, 0, 9 
+  endif
+  
+  if MIDIByte2 >= 96 AND MIDIByte2 <= 104
+    update_knob__index = MIDIByte2 - 96
+    update_knob__value = MIDIByte3
+    Call @UpdateKnob
+  endif
+  
+@End
+
+
+@UpdateKnob
+  
+  labels = []
+  
+  if page = 0
+    CopyArray page_1_labels, labels, label_length * 18 
+  endif
+  
+  if knob_sync[update_knob__index]
+
+    make_screen__type = knob_screen
+    make_screen__hw_value = update_knob__value
+    CopyArray labels[update_knob__index * label_length], make_screen__line1, label_length
+
+    number_to_ascii__value = Round (Div (update_knob__value * 100), 127)
+    Call @NumberToASCII
+    CopyArray number_to_ascii__return, make_screen__line2, number_to_ascii__length 
+    
+    Call @MakeScreen
+  else
+  
+    send_sysex__data = [0x02, 0x0F, 0x40, update_knob__index + 3, update_knob__value]
+    send_sysex__length = 5
+    Call @SendSysEx
+    knob_sync[update_knob__index] = 1
+  endif
+@End
+
+
+@NumberToASCII
+
+  max_digits = 6
+  number_to_ascii__length = 0
+  lower_digits = False
+  
+  repeat
+    Dec max_digits
+    multiplier = Pow 10, max_digits
+    if number_to_ascii__value >= multiplier OR lower_digits OR multiplier = 1
+      digit = RoundDown (Div number_to_ascii__value, multiplier)
+      number_to_ascii__return[number_to_ascii__length] = _[digit]
+      number_to_ascii__value = number_to_ascii__value - (digit * multiplier)
+      Inc number_to_ascii__length
+      lower_digits = True
+    endif
+  until max_digits <= 0
+  
+@End
+
+
+
+@SendSysEx
+
+  CopyArray sysex_prefix, send_sysex__return, 5
+  CopyArray send_sysex__data, send_sysex__return[5], send_sysex__length
+  send_sysex__length = send_sysex__length + 5
+  
+  SendSysex send_sysex__return, send_sysex__length
+@End
+
+
+@WrapDisplay
+
+  CopyArray display_prefix, wrap_display__return, 3
+  CopyArray wrap_display__data, wrap_display__return[3], wrap_display__length
+  send_sysex__length = wrap_display__length + 3
+  CopyArray wrap_display__return, send_sysex__data, send_sysex__length
+  Call @SendSysEx
+@End
+
+
+@MakeScreen
+  
+  // Fill 1st line
+  
+  make_screen__return = [make_screen__type, 0x01]
+  CopyArray make_screen__line1, make_screen__return[2], 13
+  make_screen__length = 15
+  
+  // Fill 2nd line
+  
+  if make_screen__type > 0x11
+    make_screen__return[make_screen__length] = 0x02
+    Inc make_screen__length
+    CopyArray make_screen__line2, make_screen__return[make_screen__length], 13
+    make_screen__length = make_screen__length + 13
+  endif
+  
+  // Fill hw_value or icon
+  
+  make_screen__return[make_screen__length] = 0x03
+  Inc make_screen__length
+  make_screen__return[make_screen__length] = make_screen__hw_value
+  Inc make_screen__length
+  make_screen__return[make_screen__length] = 0x00
+  Inc make_screen__length
+  
+  // Handle transient
+
+  make_screen__return[make_screen__length] = 01
+  Inc make_screen__length
+  
+  // Wrap with Display code
+  
+  wrap_display__length = make_screen__length
+  CopyArray make_screen__return, wrap_display__data, wrap_display__length
+  Call @WrapDisplay
+  
+  // Reset params
+  
+  FillArray make_screen__line1, 0, 19
+  FillArray make_screen__line2, 0, 19
+  make_screen__transient = 0
+@End
+
+
+
+@DefineVars
+  
+  sysex_prefix = [0x00, 0x20, 0x6B, 0x7F, 0x42]
+  display_prefix = [0x04, 0x01, 0x60]
+  page = 0
+  label_length = 12
+  knob_sync = []
+  
+  // @UpdateKnob params
+    update_knob__index = 0
+    update_knob__value = 0
+    
+  // @SendSysEx params
+    send_sysex__data = []
+    send_sysex__length = 0
+    send_sysex__return = []
+  
+  // @WrapDisplay params
+    wrap_display__data = []
+    wrap_display__length = 0
+    wrap_display__return = []
+    
+  // @MakeScreen params
+    make_screen__type = 0x14
+    make_screen__line1 = []
+    make_screen__line2 = []
+    make_screen__hw_value = 0
+    make_screen__return = []
+    
+    knob_screen = 0x14
+    fader_screen = 0x15
+    pad_screen = 0x16
+    
+  // @NumberToASCII params
+    number_to_ascii__value = 0
+    number_to_ascii__length = 0
+    number_to_ascii__return = []
+  
+  // ASCII Table
+    __ = 0x20
+    
+    _A = 0x41
+    _B = 0x42
+    _C = 0x43
+    _D = 0x44
+    _E = 0x45
+    _F = 0x46
+    _G = 0x47
+    _H = 0x48
+    _I = 0x49
+    _J = 0x4A
+    _K = 0x4B
+    _L = 0x4C
+    _M = 0x4D
+    _N = 0x4E
+    _O = 0x4F
+    _P = 0x50
+    _Q = 0x51
+    _R = 0x52
+    _S = 0x53
+    _T = 0x54
+    _U = 0x55
+    _V = 0x56
+    _W = 0x57
+    _X = 0x58
+    _Y = 0x59
+    _Z = 0x5A
+    
+    a = 0x61
+    b = 0x62
+    c = 0x63
+    d = 0x64
+    e = 0x65
+    f = 0x66
+    g = 0x67
+    h = 0x68
+    i = 0x69
+    j = 0x6A
+    k = 0x6B
+    l = 0x6C
+    m = 0x6D
+    n = 0x6E
+    o = 0x6F
+    p = 0x70
+    q = 0x71
+    r = 0x72
+    s = 0x73
+    t = 0x74
+    u = 0x75
+    v = 0x76
+    w = 0x77
+    x = 0x78
+    y = 0x79
+    z = 0x7A
+    
+    _ = [0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39]
+
+@End
