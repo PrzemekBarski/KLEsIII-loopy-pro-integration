@@ -1,0 +1,50 @@
+@OnLoad
+  ShowLayout 3
+  
+  page = 0
+  no_of_pages = 9
+  label_length = 12
+  
+  Call @SetVariables
+@End
+
+@OnMidiCC
+  if MIDIByte2 >= 80 AND MIDIByte2 < 80 + no_of_pages
+    page = MIDIByte2 - 80
+    Log page
+    part = MIDIByte3
+    Call @SetLabels
+  endif
+  
+@End
+
+
+@SetLabels
+
+  if page = 0
+    CopyArray page_0_labels, GLOBAL10, 36 * label_length
+  elseif page = 1
+    CopyArray page_1_labels, GLOBAL10, 36 * label_length
+  elseif page = 2
+    CopyArray page_2_labels, GLOBAL10, 36 * label_length
+  elseif page = 3
+    CopyArray page_3_labels, GLOBAL10, 36 * label_length
+  elseif page = 4
+    CopyArray page_4_labels, GLOBAL10, 36 * label_length
+  elseif page = 5
+    CopyArray page_5_labels, GLOBAL10, 36 * label_length
+  elseif page = 6
+    CopyArray page_6_labels, GLOBAL10, 36 * label_length
+  elseif page = 7
+    CopyArray page_7_labels, GLOBAL10, 36 * label_length
+  elseif page = 8
+    CopyArray page_8_labels, GLOBAL10, 36 * label_length
+  elseif page = 9
+    CopyArray page_9_labels, GLOBAL10, 36 * label_length
+  endif
+@End
+
+
+@SetVariables
+  // Generated control labels etc.
+@End
