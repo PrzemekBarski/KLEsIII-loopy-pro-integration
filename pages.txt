@@ -10,6 +10,7 @@
 
 @OnLoad 
   ShowLayout 3
+  SetShortName {KLEs3 Display}
   
   Call @DefineVars
   Call @DefinePages
@@ -69,13 +70,20 @@
 
 @LoadPage
 
+  SendMIDICC 16, 80 + page, 0 
+
   prev = page - 1
   next = page + 1
   
+  CopyArray page_names[prev * string_length], left_right_nav__l_line, 7
+  CopyArray page_names[next * string_length], left_right_nav__r_line, 7
+  
   if page = 0
     prev = no_of_pages - 1
+    FillArray left_right_nav__l_line, 0, 7 
   elseif page = no_of_pages - 1
     next = 0
+    FillArray left_right_nav__r_line, 0, 7 
   endif
   
   make_screen__type = 0x19
@@ -87,9 +95,7 @@
   endif
   
   Call @MakeScreen
-
-  CopyArray page_names[5 * string_length], left_right_nav__l_line, 7
-  CopyArray page_names[7 * string_length], left_right_nav__r_line, 7
+  
   Call @LeftRightNav
 
   CopyArray left_right_nav__return, make_header__line1, string_length 
@@ -186,8 +192,18 @@
 @LeftRightNav
 
   FillArray left_right_nav__return, __, 18
-  left_right_nav__return[0] = 0x3C
-  left_right_nav__return[17] = 0x3E
+  
+  if NOT left_right_nav__l_line[0]
+    left_right_nav__return[0] = 0x20
+  else
+    left_right_nav__return[0] = 0x3C
+  endif
+  
+  if NOT left_right_nav__r_line[0]
+    left_right_nav__return[17] = 0x20
+  else
+    left_right_nav__return[17] = 0x3E
+  endif
 
   line_index = 0
   repeat
