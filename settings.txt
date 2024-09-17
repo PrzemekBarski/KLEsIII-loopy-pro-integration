@@ -4,6 +4,8 @@
   page = 0
   no_of_pages = 9
   label_length = 12
+  knob_setting_length = 6
+  pad_setting_length = 4
   
   Call @SetVariables
 @End
@@ -11,7 +13,6 @@
 @OnMidiCC
   if MIDIByte2 >= 80 AND MIDIByte2 < 80 + no_of_pages
     page = MIDIByte2 - 80
-    Log page
     part = MIDIByte3
     Call @SetLabels
   endif
@@ -21,10 +22,14 @@
 
 @SetLabels
 
+  settings_length = 36 * knob_setting_length + 8 * pad_setting_length
+
   if page = 0
     CopyArray page_0_labels, GLOBAL10, 36 * label_length
+    CopyArray page_0_settings, GLOBAL11, settings_length
   elseif page = 1
     CopyArray page_1_labels, GLOBAL10, 36 * label_length
+    CopyArray page_1_settings, GLOBAL11, settings_length
   elseif page = 2
     CopyArray page_2_labels, GLOBAL10, 36 * label_length
   elseif page = 3
