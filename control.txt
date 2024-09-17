@@ -14,6 +14,7 @@
   
   Call @DefineVars
   Call @DefinePages
+  Call @InitPads
     
 @End
 
@@ -31,10 +32,11 @@
   if MIDIByte2 >= 80 AND MIDIByte2 < 80 + no_of_pages
     page = MIDIByte2 - 80
     part = MIDIByte3
-    FillArray knob_sync, 0, 9 
+    FillArray knob_sync, 0, 9
+    Call @InitPads
   endif
   
-  if MIDIByte2 >= 96 AND MIDIByte2 <= 104
+  if MIDIByte2 >= 96 AND MIDIByte2 <= 113
     update_knob__index = MIDIByte2 - 96
     update_knob__value = MIDIByte3
     Call @UpdateKnob
@@ -45,15 +47,24 @@
 
 @UpdateKnob
 
-  labels = []
+  type = 0
   
-  CopyArray GLOBAL10, labels, label_length * 36 
+  if update_knob__index >= 9
+    type = 1
+  endif
   
-  if knob_sync[update_knob__index]
+  Log knob_sync[update_knob__index]
+  
+  if knob_sync[update_knob__index] OR type = 1
 
     make_screen__type = knob_screen
+    if type = 1
+      make_screen__type = fader_screen
+    endif
+    
     make_screen__hw_value = update_knob__value
-    CopyArray labels[update_knob__index * label_length], make_screen__line1, label_length
+    label_index = (update_knob__index + part * 18) * label_length
+    CopyArray GLOBAL10[label_index], make_screen__line1, label_length
 
     number_to_ascii__value = Round (Div (update_knob__value * 100), 127)
     Call @NumberToASCII
@@ -67,6 +78,26 @@
     Call @SendSysEx
     knob_sync[update_knob__index] = 1
   endif
+@End
+
+
+@InitPads
+  
+  it = 8
+  while it > 0
+    Dec it
+    config_index = no_of_controls * control_setting_length + it * pad_setting_length
+    CopyArray GLOBAL11[config_index], pad_config, 3
+
+    button_id = 0x1C + it
+    button_data = [0x04, 0x01, 0x16, button_id]
+    CopyArray pad_config, button_data[4], 3
+ 
+    CopyArray button_data, send_sysex__data, 7
+    send_sysex__length = 7
+    Call @SendSysEx
+  endwhile
+  
 @End
 
 
@@ -97,7 +128,7 @@
   CopyArray sysex_prefix, send_sysex__return, 5
   CopyArray send_sysex__data, send_sysex__return[5], send_sysex__length
   send_sysex__length = send_sysex__length + 5
-  
+
   SendSysex send_sysex__return, send_sysex__length
 @End
 
@@ -163,7 +194,11 @@
   sysex_prefix = [0x00, 0x20, 0x6B, 0x7F, 0x42]
   display_prefix = [0x04, 0x01, 0x60]
   page = 0
+  part = 0
+  no_of_controls = 36
   label_length = 12
+  control_setting_length = 6
+  pad_setting_length = 4
   knob_sync = []
   
   // @UpdateKnob params
