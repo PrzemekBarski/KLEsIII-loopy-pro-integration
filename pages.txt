@@ -51,14 +51,21 @@
     if MIDIByte3 = 63
       if page > 0
         Dec page
+        part = 0
         Call @LoadPage
       endif
     elseif MIDIByte3 = 65
       if page < no_of_pages - 1
         Inc page
+        part = 0
         Call @LoadPage
       endif
     endif
+  endif
+  
+  if MIDIByte2 = 0x77 AND MIDIByte3 > 0 AND page_parts[page]
+    part = NOT part
+    Call @LoadPage
   endif
 @End
 
@@ -70,7 +77,7 @@
 
 @LoadPage
 
-  SendMIDICC 16, 80 + page, 0 
+  SendMIDICC 16, 80 + page, part 
 
   prev = page - 1
   next = page + 1
@@ -89,19 +96,41 @@
   make_screen__type = 0x19
   make_screen__icon = page_icons[page]
   CopyArray page_names[page * string_length], make_screen__line1, string_length
-
-  if page_parts[page]
+  
+  button_id = 0x07
+  button_data = [0x04, 0x01, 0x16, button_id]
+    
+  if NOT page_parts[page]
+    off = [0,0,0]
+    CopyArray off, button_data[4], 3
+  elseif part = 1
+    pink = [0x7F,0,0x7F]
+    CopyArray pink, button_data[4], 3
+    make_screen__line2 = [_P,a,r,t,__,_[part + 1]]
+  else
+    yellow = [0x7F,0x7F,0]
+    CopyArray yellow, button_data[4], 3
     make_screen__line2 = [_P,a,r,t,__,_[part + 1]]
   endif
+ 
+  CopyArray button_data, send_sysex__data, 7
+  send_sysex__length = 7
+  Call @SendSysEx
   
   Call @MakeScreen
   
   Call @LeftRightNav
 
   CopyArray left_right_nav__return, make_header__line1, string_length 
-  // make_header__line1 = [_T,e,s,t]
   Call @MakeHeader
 @End
+
+
+@LoadPart
+
+    
+@End
+
 
 @SendSysEx
 
