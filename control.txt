@@ -13,27 +13,50 @@
   SetShortName {KLEs3 Display}
   
   Call @DefineVars
-  Call @DefinePages
-  Call @InitPads
+  
+  SetTimerInterval 200
+  StartTimer
     
 @End
 
-
-@DefinePages
-  
-  no_of_pages = 9
-  
+@OnTimer
+  Call @PollPads
+  StopTimer
 @End
 
+
+@PollPads
+  
+  it = 2
+  while it > 0
+    Dec it
+    it2 = 8
+    while it2 > 0
+      Dec it2
+      config_index = no_of_controls * control_setting_length + it2 * pad_setting_length + 3
+      SendMIDICC 16, 0x14 + it2, (NOT GLOBAL11[config_index]) * 127
+    endwhile
+  endwhile
+@End
 
 
 @OnMidiCC
   
   if MIDIByte2 >= 80 AND MIDIByte2 < 80 + no_of_pages
     page = MIDIByte2 - 80
-    part = MIDIByte3
+    part = 0
+    if MIDIByte3
+      part = MIDIByte3
+    endif
+
     FillArray knob_sync, 0, 9
-    Call @InitPads
+    Call @PollPads
+  endif
+  
+  if MIDIByte2 >= 0x14 AND MIDIByte2 <= 0x7B
+    update_pad__index = MIDIByte2 - 0x14
+    update_pad__value = MIDIByte3
+    Call @UpdatePad
   endif
   
   if MIDIByte2 >= 96 AND MIDIByte2 <= 113
@@ -53,8 +76,6 @@
     type = 1
   endif
   
-  Log knob_sync[update_knob__index]
-  
   if knob_sync[update_knob__index] OR type = 1
 
     make_screen__type = knob_screen
@@ -62,13 +83,20 @@
       make_screen__type = fader_screen
     endif
     
+    get_value__value = update_knob__value
+    get_value__index = update_knob__index
+    Call @GetValue
+    
+    number_to_ascii__decimal = get_value__decimal
+    number_to_ascii__value = get_value__return
+    Call @NumberToASCII
+    CopyArray number_to_ascii__return, make_screen__line2, number_to_ascii__length
+    make_screen__line2[number_to_ascii__length] = 0x20
+    CopyArray get_value__unit, make_screen__line2[number_to_ascii__length + 1], 3
+    
     make_screen__hw_value = update_knob__value
     label_index = (update_knob__index + part * 18) * label_length
-    CopyArray GLOBAL10[label_index], make_screen__line1, label_length
-
-    number_to_ascii__value = Round (Div (update_knob__value * 100), 127)
-    Call @NumberToASCII
-    CopyArray number_to_ascii__return, make_screen__line2, number_to_ascii__length 
+    CopyArray GLOBAL10[label_index], make_screen__line1, label_length 
     
     Call @MakeScreen
   else
@@ -78,6 +106,55 @@
     Call @SendSysEx
     knob_sync[update_knob__index] = 1
   endif
+@End
+
+
+@GetValue
+  
+  get_value__decimal = 0
+  settings_index = (get_value__index + part * 18) * control_setting_length
+  min = GLOBAL11[settings_index + 0]
+  max = GLOBAL11[settings_index + 1]
+  curve = GLOBAL11[settings_index + 2]
+  CopyArray GLOBAL11[settings_index + 3], get_value__unit, 3
+  
+  if min > max
+    get_value__value = 127 - get_value__value
+  endif
+  
+  if get_value__unit[0] = _H AND get_value__unit[1] = z
+    get_value__return = TranslateScale get_value__value, 0, 127, 0, 1
+    get_value__return = Pow 1000, get_value__return 
+    get_value__return = TranslateScale get_value__return, 1, 1000, min, max
+  else 
+    get_value__return = TranslateScale get_value__value, 0, 127, min, max
+    get_value__return = TranslateCurve get_value__return, curve, min, max
+
+    decimal_value = TranslateScale 63, 0, 127, min, max
+    decimal_value = TranslateCurve decimal_value, curve, min, max
+    decimal_value = decimal_value - min
+    
+    if decimal_value < 30 AND get_value__return < 100
+      get_value__decimal = 1
+    endif
+  endif
+  
+  
+  if (get_value__unit[0] = _H AND get_value__unit[1] = z) OR (get_value__unit[0] = m AND get_value__unit[1] = s)
+
+    if get_value__return >= 1000
+      get_value__return = TranslateScale get_value__return, 1000, max, 1, (Div max, 1000)  
+      get_value__decimal = 1
+      
+      if get_value__unit[0] = _H AND get_value__unit[1] = z
+        get_value__unit = [k,_H,z]
+      else
+        get_value__unit = [s,0,0]
+      endif
+    endif
+  endif
+  
+  // Log get_value__return
 @End
 
 
@@ -99,6 +176,29 @@
   endwhile
   
 @End
+  
+
+@UpdatePad
+
+  config_index = no_of_controls * control_setting_length + update_pad__index * pad_setting_length
+  CopyArray GLOBAL11[config_index], pad_config, 3
+
+  if NOT update_pad__value
+    it = 3
+    while it >0
+      Dec it
+      pad_config[it] = Div pad_config[it], 8
+    endwhile
+  endif
+
+  button_id = 0x1C + update_pad__index
+  button_data = [0x04, 0x01, 0x16, button_id]
+  CopyArray pad_config, button_data[4], 3
+ 
+  CopyArray button_data, send_sysex__data, 7
+  send_sysex__length = 7
+  Call @SendSysEx
+@End
 
 
 @NumberToASCII
@@ -107,17 +207,44 @@
   number_to_ascii__length = 0
   lower_digits = False
   
+  if number_to_ascii__value < 0
+    number_to_ascii__return[number_to_ascii__length] = 0x2D
+    Inc number_to_ascii__length
+    number_to_ascii__value = Abs number_to_ascii__value
+  endif
+  
   repeat
     Dec max_digits
     multiplier = Pow 10, max_digits
     if number_to_ascii__value >= multiplier OR lower_digits OR multiplier = 1
-      digit = RoundDown (Div number_to_ascii__value, multiplier)
+      digit = RoundDown (Div (RoundDown number_to_ascii__value), multiplier)
       number_to_ascii__return[number_to_ascii__length] = _[digit]
       number_to_ascii__value = number_to_ascii__value - (digit * multiplier)
       Inc number_to_ascii__length
       lower_digits = True
+      // Log number_to_ascii__value
     endif
   until max_digits <= 0
+  
+  if number_to_ascii__decimal
+    number_to_ascii__value = Round (number_to_ascii__value * (Pow 10, number_to_ascii__decimal))
+
+    if NOT (number_to_ascii__value = 0)
+      number_to_ascii__return[number_to_ascii__length] = 0x2E
+      Inc number_to_ascii__length
+ 
+      repeat
+        Dec number_to_ascii__decimal
+        multiplier = Pow 10, number_to_ascii__decimal
+        if number_to_ascii__value >= multiplier OR multiplier = 1
+          digit = RoundDown (Div (RoundDown number_to_ascii__value), multiplier)
+          number_to_ascii__return[number_to_ascii__length] = _[digit]
+          number_to_ascii__value = number_to_ascii__value - (digit * multiplier)
+          Inc number_to_ascii__length
+        endif
+      until max_digits <= 0
+    endif
+  endif
   
 @End
 
@@ -190,6 +317,8 @@
 
 
 @DefineVars
+  
+  no_of_pages = 9
   
   sysex_prefix = [0x00, 0x20, 0x6B, 0x7F, 0x42]
   display_prefix = [0x04, 0x01, 0x60]
