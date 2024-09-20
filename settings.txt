@@ -25,27 +25,35 @@
   settings_length = 36 * knob_setting_length + 8 * pad_setting_length
 
   if page = 0
-    CopyArray page_0_labels, GLOBAL10, 36 * label_length
+    CopyArray page_0_labels, GLOBAL10, 52 * label_length
     CopyArray page_0_settings, GLOBAL11, settings_length
   elseif page = 1
-    CopyArray page_1_labels, GLOBAL10, 36 * label_length
+    CopyArray page_1_labels, GLOBAL10, 52 * label_length
     CopyArray page_1_settings, GLOBAL11, settings_length
   elseif page = 2
-    CopyArray page_2_labels, GLOBAL10, 36 * label_length
+    CopyArray page_2_labels, GLOBAL10, 52 * label_length
+    CopyArray page_2_settings, GLOBAL11, settings_length
   elseif page = 3
-    CopyArray page_3_labels, GLOBAL10, 36 * label_length
+    CopyArray page_3_labels, GLOBAL10, 52 * label_length
+    CopyArray page_3_settings, GLOBAL11, settings_length
   elseif page = 4
-    CopyArray page_4_labels, GLOBAL10, 36 * label_length
+    CopyArray page_4_labels, GLOBAL10, 52 * label_length
+    CopyArray page_4_settings, GLOBAL11, settings_length
   elseif page = 5
-    CopyArray page_5_labels, GLOBAL10, 36 * label_length
+    CopyArray page_5_labels, GLOBAL10, 52 * label_length
+    CopyArray page_5_settings, GLOBAL11, settings_length
   elseif page = 6
-    CopyArray page_6_labels, GLOBAL10, 36 * label_length
+    CopyArray page_6_labels, GLOBAL10, 52 * label_length
+    CopyArray page_6_settings, GLOBAL11, settings_length
   elseif page = 7
-    CopyArray page_7_labels, GLOBAL10, 36 * label_length
+    CopyArray page_7_labels, GLOBAL10, 52 * label_length
+    CopyArray page_7_settings, GLOBAL11, settings_length
   elseif page = 8
-    CopyArray page_8_labels, GLOBAL10, 36 * label_length
+    CopyArray page_8_labels, GLOBAL10, 52 * label_length
+    CopyArray page_8_settings, GLOBAL11, settings_length
   elseif page = 9
-    CopyArray page_9_labels, GLOBAL10, 36 * label_length
+    CopyArray page_9_labels, GLOBAL10, 52 * label_length
+    CopyArray page_9_settings, GLOBAL11, settings_length
   endif
 @End
 
