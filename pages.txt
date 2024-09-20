@@ -12,13 +12,16 @@
   ShowLayout 3
   SetShortName {KLEs3 Display}
   
+  SetLFOType 0, {Square} 
+  SetupLFO 0, 0, 0x7F, False, 4
+  
   Call @DefineVars
   Call @DefinePages
   
   daw_init = [0x00, 0x20, 0x6B, 0x7F, 0x42, 0x02, 0x0F, 0x40, 0x5A, 0x01]
   SendSysex daw_init, 10
 
-  page = 3
+  page = 2
   Call @LoadPage
 
 @End
@@ -26,7 +29,10 @@
 
 @DefinePages
   
-  no_of_pages = 9
+  no_of_templates = 9
+  no_of_pages = 7
+  pages = [3, 4, 0, 1, 2, 6, 5]
+  pages_enabled = [1, 1, 1, 1, 1, 1, 1]
   
   page_names[0 * string_length] = [_S,y,n,t,h,__,_[1]]
   page_names[1 * string_length] = [_S,y,n,t,h,_[2]]
@@ -40,6 +46,7 @@
 
   page_icons = [0x18, 0x18, 0x18, 0x03, 0x03, 0x37, 0x28, 0x2F, 0x3F]
   page_parts = [0, 0, 0, 1, 1, 1, 0, 1, 0]            // 0 = 1 part; 1 = 2 parts;
+  page_groups = [0, 0, 0, 1, 1, 0, 0, 0, 0]
   
 @End
 
@@ -47,25 +54,88 @@
 
 @OnMidiCC
   
+  // Receive active page
+  
+  if MIDIChannel = 15 AND MIDIByte2 >= 80 AND MIDIByte2 < 80 + no_of_pages
+    page_index = MIDIByte2 - 80
+    part = 0
+    if MIDIByte3
+      part = MIDIByte3
+    endif
+    
+    it = no_of_pages
+    while it >0
+      Dec it
+      if pages[it] = page_index
+        page = it
+        Call @LoadPage
+      endif
+    endwhile
+  endif
+  
+  // Receive scroll event from keyboard
+  
   if MIDIByte2 = 0x74
     if MIDIByte3 = 63
       if page > 0
         Dec page
         part = 0
-        Call @LoadPage
+        while NOT pages_enabled[page] AND page > 0
+          Dec page
+        endwhile
+        if pages_enabled[page]
+          SendMIDICC 16, 80 + pages[page], part
+        endif
       endif
     elseif MIDIByte3 = 65
       if page < no_of_pages - 1
         Inc page
         part = 0
-        Call @LoadPage
+        while NOT pages_enabled[page] AND page < no_of_pages
+          Inc page
+        endwhile
+        if pages_enabled[page]
+          SendMIDICC 16, 80 + pages[page], part
+        endif 
       endif
     endif
   endif
   
-  if MIDIByte2 = 0x77 AND MIDIByte3 > 0 AND page_parts[page]
+  // Receive "part" button press
+
+  if MIDIByte2 = 0x77 AND MIDIByte3 > 0 AND page_parts[pages[page]]
     part = NOT part
-    Call @LoadPage
+    SendMIDICC 16, 80 + pages[page], part 
+  endif
+  
+  // Receive page on / off events
+
+  if MIDIChannel = 15 AND MIDIByte2 >= 50 AND MIDIByte2 < 62
+    page_index = MIDIByte2 - 50
+    pages_enabled[page_index] = MIDIByte3
+  endif
+  
+  // Receive monitor mode trigger
+  
+  if MIDIChannel = 15 AND MIDIByte2 = 40
+    if MIDIByte3
+      monitor_mode = 1
+      SetTimerInterval 100
+      StartTimer
+    else
+      monitor_mode = 0
+      StopTimer
+      Call @MakeFooter
+    endif
+  endif
+  
+  if MIDIChannel = 0 AND MIDIByte2 = 44
+    if MIDIByte3 and monitor_mode = 1
+      SendMIDICC 16, 40, 0, 200
+      monitor_mode = 0
+      StopTimer
+      Call @MakeFooter
+    endif
   endif
 @End
 
@@ -77,30 +147,37 @@
 
 @LoadPage
 
-  SendMIDICC 16, 80 + page, part 
-
   prev = page - 1
   next = page + 1
   
-  CopyArray page_names[prev * string_length], left_right_nav__l_line, 7
-  CopyArray page_names[next * string_length], left_right_nav__r_line, 7
-  
-  if page = 0
-    prev = no_of_pages - 1
-    FillArray left_right_nav__l_line, 0, 7 
-  elseif page = no_of_pages - 1
-    next = 0
-    FillArray left_right_nav__r_line, 0, 7 
+  FillArray left_right_nav__l_line, 0, 7
+  FillArray left_right_nav__r_line, 0, 7
+
+  if prev >= 0
+    while NOT pages_enabled[prev] AND prev > 0
+      Dec prev
+    endwhile
+    if pages_enabled[prev]
+      CopyArray page_names[pages[prev] * string_length], left_right_nav__l_line, 7
+    endif
   endif
   
+  while NOT pages_enabled[next] AND next < no_of_pages
+    Inc next
+  endwhile
+  if next < no_of_pages AND pages_enabled[page]
+    CopyArray page_names[pages[next] * string_length], left_right_nav__r_line, 7
+  endif
+  
+  
   make_screen__type = 0x19
-  make_screen__icon = page_icons[page]
-  CopyArray page_names[page * string_length], make_screen__line1, string_length
+  make_screen__icon = page_icons[pages[page]]
+  CopyArray page_names[pages[page] * string_length], make_screen__line1, string_length
   
   button_id = 0x07
   button_data = [0x04, 0x01, 0x16, button_id]
     
-  if NOT page_parts[page]
+  if NOT page_parts[pages[page]]
     off = [0,0,0]
     CopyArray off, button_data[4], 3
   elseif part = 1
@@ -123,6 +200,34 @@
 
   CopyArray left_right_nav__return, make_header__line1, string_length 
   Call @MakeHeader
+  
+  make_footer = 1
+  SetTimerInterval 100
+  ResetTimer
+  StartTimer
+@End
+
+
+@OnTimer
+  
+  if make_footer
+    Call @MakeFooter
+    make_footer = 0
+  endif
+  
+  if monitor_mode
+    new_led_value = GetLFOValue 0
+    if NOT (monitor_led_value = new_led_value)
+      monitor_led_value = new_led_value
+      button_data = [0x04, 0x01, 0x16, 0x18, monitor_led_value, 0x00, 0x00]
+      CopyArray button_data, send_sysex__data, 7
+      send_sysex__length = 7
+      Call @SendSysEx
+    endif
+  else
+    StopTimer
+    ResetTimer 
+  endif
 @End
 
 
@@ -242,7 +347,7 @@
     Inc line_index
   until line_index >= 7
   
-  line_index = 6
+  line_index = 7
   repeat
     Dec line_index
   until left_right_nav__r_line[line_index] OR line_index <= 0
@@ -260,16 +365,61 @@
 @End
 
 
+@MakeFooter
+  
+  footer_data = [0x03]
+  footer_length = 1
+  
+  buttons_it = 0
+  while buttons_it < 4
+    label_index = 44 * label_length + (part * 4 + buttons_it) * label_length
+
+    button_id = 0x18 + buttons_it
+    button_data = [0x04, 0x01, 0x16, button_id, 0x00, 0x00, 0x00]
+
+    if GLOBAL10[label_index]
+      footer_data[footer_length] = 0x10 * (buttons_it + 1) + 1
+      Inc footer_length
+      letter_index = 0
+      while GLOBAL10[label_index + letter_index] AND letter_index < 7
+        footer_data[footer_length] = GLOBAL10[label_index + letter_index]
+        Inc footer_length
+        Inc letter_index
+      endwhile
+      footer_data[footer_length] = 0x00
+      Inc footer_length
+
+      button_data = [0x04, 0x01, 0x16, button_id, 0x7F, 0x7F, 0x7F]
+    else
+      footer_data[footer_length] = [0x10 * (buttons_it + 1), 0x00, 0x00]
+      footer_length = footer_length + 3
+    endif
+
+    CopyArray button_data, send_sysex__data, 7
+    send_sysex__length = 7
+    Call @SendSysEx
+    
+    Inc buttons_it
+  endwhile
+  
+  wrap_display__length = footer_length
+  CopyArray footer_data, wrap_display__data, wrap_display__length
+  Call @WrapDisplay
+  
+@End
+
+
 //  CopyArray data, log_array__data, make_screen__length
 //  log_array__length = data__length
 //  Call @LogArray
 
 @LogArray
 
-  repeat
+  log_it = log_array__length
+  while log_it > 0
+    Dec log_it
     Log log_array__length, {: }, log_array__data[log_array__length]
-    Dec log_array__length
-  until log_array__length <= 0
+  endwhile
 @End
 
 
@@ -279,8 +429,11 @@
   sysex_prefix = [0x00, 0x20, 0x6B, 0x7F, 0x42]
   display_prefix = [0x04, 0x01, 0x60]
   string_length = 18
+  label_length = 12
   page = 6
   part = 0
+  monitor_mode = 0
+  monitor_led_value = 0
   
   // @SendSysEx params
     send_sysex__data = []
