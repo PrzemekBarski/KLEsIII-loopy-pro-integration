@@ -14,14 +14,9 @@
   
   Call @DefineVars
   
-  SetTimerInterval 200
-  StartTimer
-    
-@End
-
-@OnTimer
   Call @PollPads
-  StopTimer
+  Call @PollKnobs
+    
 @End
 
 
@@ -33,9 +28,18 @@
     it2 = 8
     while it2 > 0
       Dec it2
-      config_index = no_of_controls * control_setting_length + it2 * pad_setting_length + 3
-      SendMIDICC 16, 0x14 + it2, (NOT GLOBAL11[config_index]) * 127
+      SendMIDICC 16, 0x14 + it2, 127, 200
     endwhile
+  endwhile
+@End
+
+
+@PollKnobs
+  
+  it = 18
+  while it > 0
+    Dec it
+    SendMIDICC 16, 96 + it, 127, 200
   endwhile
 @End
 
@@ -50,10 +54,13 @@
     endif
 
     FillArray knob_sync, 0, 9
+    FillArray pad_sync, 0, 8
+    
     Call @PollPads
+    Call @PollKnobs
   endif
   
-  if MIDIByte2 >= 0x14 AND MIDIByte2 <= 0x7B
+  if MIDIByte2 >= 0x14 AND MIDIByte2 <= 0x1B
     update_pad__index = MIDIByte2 - 0x14
     update_pad__value = MIDIByte3
     Call @UpdatePad
@@ -118,32 +125,40 @@
   curve = GLOBAL11[settings_index + 2]
   CopyArray GLOBAL11[settings_index + 3], get_value__unit, 3
   
+  //min = 0.1
+  //max = 10
+  //curve = 3
+  //get_value__unit = [_H,z]
+  
   if min > max
     get_value__value = 127 - get_value__value
   endif
   
-  if get_value__unit[0] = _H AND get_value__unit[1] = z
+  if curve < 0
+    base = Abs curve
     get_value__return = TranslateScale get_value__value, 0, 127, 0, 1
-    get_value__return = Pow 1000, get_value__return 
-    get_value__return = TranslateScale get_value__return, 1, 1000, min, max
+    get_value__return = Pow base, get_value__return 
+    get_value__return = TranslateScale get_value__return, 1, base, min, max
   else 
     get_value__return = TranslateScale get_value__value, 0, 127, min, max
     get_value__return = TranslateCurve get_value__return, curve, min, max
-
-    decimal_value = TranslateScale 63, 0, 127, min, max
-    decimal_value = TranslateCurve decimal_value, curve, min, max
-    decimal_value = decimal_value - min
-    
-    if decimal_value < 30 AND get_value__return < 100
-      get_value__decimal = 1
-    endif
   endif
   
+  decimal_value = TranslateScale 63, 0, 127, min, max
+  decimal_value = TranslateCurve decimal_value, curve, min, max
+  decimal_value = decimal_value - min
+
+  if decimal_value < 10 AND (get_value__return - min) < 10
+    get_value__decimal = 2
+  elseif decimal_value < 30 AND (get_value__return - min) < 100
+    get_value__decimal = 1
+  endif
   
   if (get_value__unit[0] = _H AND get_value__unit[1] = z) OR (get_value__unit[0] = m AND get_value__unit[1] = s)
 
     if get_value__return >= 1000
-      get_value__return = TranslateScale get_value__return, 1000, max, 1, (Div max, 1000)  
+      new_max = TranslateScale max, 0, 100000, 0, 100
+      get_value__return = TranslateScale get_value__return, 1000, max, 1, new_max  
       get_value__decimal = 1
       
       if get_value__unit[0] = _H AND get_value__unit[1] = z
@@ -154,50 +169,33 @@
     endif
   endif
   
-  // Log get_value__return
 @End
-
-
-@InitPads
   
-  it = 8
-  while it > 0
-    Dec it
-    config_index = no_of_controls * control_setting_length + it * pad_setting_length
+
+@UpdatePad
+
+  if pad_sync[update_pad__index]
+    config_index = no_of_controls * control_setting_length + update_pad__index * pad_setting_length
     CopyArray GLOBAL11[config_index], pad_config, 3
 
-    button_id = 0x1C + it
+    if NOT update_pad__value OR (pad_config[3] AND pad_sync[update_pad__index] = 1)
+      it = 3
+      while it >0
+        Dec it
+        pad_config[it] = Div pad_config[it], 8
+      endwhile
+    endif
+
+    button_id = 0x1C + update_pad__index
     button_data = [0x04, 0x01, 0x16, button_id]
     CopyArray pad_config, button_data[4], 3
  
     CopyArray button_data, send_sysex__data, 7
     send_sysex__length = 7
     Call @SendSysEx
-  endwhile
-  
-@End
-  
-
-@UpdatePad
-
-  config_index = no_of_controls * control_setting_length + update_pad__index * pad_setting_length
-  CopyArray GLOBAL11[config_index], pad_config, 3
-
-  if NOT update_pad__value
-    it = 3
-    while it >0
-      Dec it
-      pad_config[it] = Div pad_config[it], 8
-    endwhile
+  else
+    pad_sync[update_pad__index] = 1
   endif
-
-  button_id = 0x1C + update_pad__index
-  button_data = [0x04, 0x01, 0x16, button_id]
-  CopyArray pad_config, button_data[4], 3
- 
-  CopyArray button_data, send_sysex__data, 7
-  send_sysex__length = 7
-  Call @SendSysEx
 @End
 
 
@@ -222,7 +220,6 @@
       number_to_ascii__value = number_to_ascii__value - (digit * multiplier)
       Inc number_to_ascii__length
       lower_digits = True
-      // Log number_to_ascii__value
     endif
   until max_digits <= 0
   
@@ -236,13 +233,13 @@
       repeat
         Dec number_to_ascii__decimal
         multiplier = Pow 10, number_to_ascii__decimal
-        if number_to_ascii__value >= multiplier OR multiplier = 1
+        if number_to_ascii__value > 0
           digit = RoundDown (Div (RoundDown number_to_ascii__value), multiplier)
           number_to_ascii__return[number_to_ascii__length] = _[digit]
           number_to_ascii__value = number_to_ascii__value - (digit * multiplier)
           Inc number_to_ascii__length
         endif
-      until max_digits <= 0
+      until number_to_ascii__decimal <= 0
     endif
   endif
   
@@ -329,6 +326,7 @@
   control_setting_length = 6
   pad_setting_length = 4
   knob_sync = []
+  pad_sync = []
   
   // @UpdateKnob params
     update_knob__index = 0
